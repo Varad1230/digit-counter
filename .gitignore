@@ -1,0 +1,7 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Screenshots saved by the app at runtime
+assets/screenshot_*.jpg

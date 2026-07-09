@@ -23,24 +23,22 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 from finger_counter import FingerCounter
 from hand_tracker import HandTracker
 
+
 def save_screenshot(frame, output_dir='assets'):
     """Save a screenshot of the current frame"""
-    # Create the output directory if it doesn't exist
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    
-    # Generate a filename with timestamp
+
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     filename = os.path.join(output_dir, f"screenshot_{timestamp}.jpg")
-    
-    # Save the image
+
     cv2.imwrite(filename, frame)
     print(f"Screenshot saved: {filename}")
-    
+
     return filename
 
+
 def main():
-    # Print banner
     print("=" * 50)
     print("Finger Counter using Hand Tracking")
     print("=" * 50)
@@ -48,63 +46,50 @@ def main():
     print("  Press 'q' to quit")
     print("  Press 's' to save a screenshot")
     print("=" * 50)
-    
-    # Initialize webcam
+
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print("Error: Could not open webcam.")
         return
-    
-    # Set webcam resolution
+
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-    
-    # Initialize finger counter
+
     counter = FingerCounter()
-    
-    # Initialize fps counter variables
+    tracker = HandTracker()
+
     prev_time = 0
     curr_time = 0
-    
+
+    print("Starting hand detection. Move your hand in front of the camera...")
+
     while cap.isOpened():
         success, frame = cap.read()
         if not success:
             print("Error: Could not read frame.")
             break
-        
-        # Calculate FPS
+
         curr_time = time.time()
         fps = 1 / (curr_time - prev_time) if (curr_time - prev_time) > 0 else 0
         prev_time = curr_time
-        
+
         # Flip the frame horizontally for a more intuitive mirror view
         frame = cv2.flip(frame, 1)
-        
-        # Convert BGR to RGB
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-        # Process the frame and get hand landmarks
-        results = counter.hands.process(rgb_frame)
-        
-        # Draw hand landmarks and count fingers
+
+        # Track hands using MediaPipe
+        frame, results = tracker.track_hands(frame)
+
         if results.multi_hand_landmarks:
             for hand_landmarks in results.multi_hand_landmarks:
-                # Draw hand landmarks
-                counter.mp_drawing.draw_landmarks(
-                    frame,
-                    hand_landmarks,
-                    counter.mp_hands.HAND_CONNECTIONS,
-                    counter.mp_drawing_styles.get_default_hand_landmarks_style(),
-                    counter.mp_drawing_styles.get_default_hand_connections_style()
+                # Count fingers using actual hand landmarks
+                finger_status = counter.count_fingers(
+                    hand_landmarks, frame.shape[1], frame.shape[0]
                 )
-                
-                # Count fingers and get their status
-                finger_status = counter.count_fingers(hand_landmarks)
-                
+
                 # Recognize digit from finger configuration
-                digit = counter.digit_recognizer.recognize_digit(finger_status)
+                digit = counter.digit_recognizer.recognize_digit(tuple(finger_status))
                 digit_name = counter.digit_recognizer.get_digit_name(digit)
-                
+
                 # Display finger count and recognized digit
                 cv2.putText(
                     frame,
@@ -116,7 +101,7 @@ def main():
                     2,
                     cv2.LINE_AA
                 )
-                
+
                 cv2.putText(
                     frame,
                     f"Digit: {digit_name}",
@@ -127,7 +112,7 @@ def main():
                     2,
                     cv2.LINE_AA
                 )
-                
+
                 # Draw finger status
                 for i, status in enumerate(finger_status):
                     finger_name = ["Thumb", "Index", "Middle", "Ring", "Pinky"][i]
@@ -142,19 +127,8 @@ def main():
                         1,
                         cv2.LINE_AA
                     )
-                
-                # Draw bounding box around hand
-                x_min = min([landmark.x for landmark in hand_landmarks.landmark])
-                y_min = min([landmark.y for landmark in hand_landmarks.landmark])
-                x_max = max([landmark.x for landmark in hand_landmarks.landmark])
-                y_max = max([landmark.y for landmark in hand_landmarks.landmark])
-                
-                x_min, y_min = int(x_min * frame.shape[1]), int(y_min * frame.shape[0])
-                x_max, y_max = int(x_max * frame.shape[1]), int(y_max * frame.shape[0])
-                
-                cv2.rectangle(frame, (x_min-20, y_min-20), (x_max+20, y_max+20), (0, 255, 0), 2)
         else:
-            # No hand detected
+            # No hand detected - don't run digit recognition at all
             cv2.putText(
                 frame,
                 "No hand detected",
@@ -165,7 +139,7 @@ def main():
                 2,
                 cv2.LINE_AA
             )
-        
+
         # Display FPS
         cv2.putText(
             frame,
@@ -177,7 +151,7 @@ def main():
             2,
             cv2.LINE_AA
         )
-        
+
         # Display controls
         cv2.putText(
             frame,
@@ -189,24 +163,22 @@ def main():
             2,
             cv2.LINE_AA
         )
-        
+
         # Display the frame
         cv2.imshow('Finger Counter', frame)
-        
+
         # Handle key presses
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
-            # Quit
             break
         elif key == ord('s'):
-            # Save screenshot
             saved_file = save_screenshot(frame)
             print(f"Screenshot saved to {saved_file}")
-    
-    # Release resources
+
     cap.release()
     cv2.destroyAllWindows()
     print("Application closed.")
 
+
 if __name__ == "__main__":
-    main() 
+    main()
